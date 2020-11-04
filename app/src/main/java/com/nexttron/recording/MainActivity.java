@@ -16,6 +16,8 @@ import android.util.Log;
 import android.widget.Button;
 
 import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.components.Legend;
+import com.github.mikephil.charting.components.XAxis;
 import com.github.mikephil.charting.components.YAxis;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.LineData;
@@ -23,10 +25,12 @@ import com.github.mikephil.charting.data.LineDataSet;
 import com.github.mikephil.charting.highlight.Highlight;
 import com.github.mikephil.charting.interfaces.datasets.ILineDataSet;
 import com.github.mikephil.charting.listener.OnChartValueSelectedListener;
+import com.github.mikephil.charting.utils.ColorTemplate;
 
 import static android.media.AudioRecord.READ_NON_BLOCKING;
 
-public class MainActivity extends AppCompatActivity implements OnChartValueSelectedListener {
+public class MainActivity extends AppCompatActivity implements
+        OnChartValueSelectedListener {
 
     private static final String LOG_TAG = "AudioRecordTest";
     private static final int REQUEST_RECORD_AUDIO_PERMISSION = 200;
@@ -40,6 +44,7 @@ public class MainActivity extends AppCompatActivity implements OnChartValueSelec
     LineChart dataChart;
     AudioRecord recorder = null;
     RecordThread recordThread;
+
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -63,8 +68,6 @@ public class MainActivity extends AppCompatActivity implements OnChartValueSelec
     }
 
 
-
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -74,10 +77,53 @@ public class MainActivity extends AppCompatActivity implements OnChartValueSelec
         Button stopButton = findViewById(R.id.stopButton);
         dataChart = findViewById(R.id.dataChart);
         dataChart.setOnChartValueSelectedListener(this);
-        dataChart.setDrawGridBackground(false);
-        dataChart.getDescription().setEnabled(false);
-        dataChart.setNoDataText("No chart data available. Use the menu to add entries and data sets!");
+        // enable description text
+        dataChart.getDescription().setEnabled(true);
 
+        // enable touch gestures
+        dataChart.setTouchEnabled(true);
+
+        // enable scaling and dragging
+        dataChart.setDragEnabled(true);
+        dataChart.setScaleEnabled(true);
+        dataChart.setDrawGridBackground(false);
+
+        // if disabled, scaling can be done on x- and y-axis separately
+        dataChart.setPinchZoom(true);
+
+        // set an alternative background color
+        dataChart.setBackgroundColor(Color.LTGRAY);
+
+        LineData data = new LineData();
+        data.setValueTextColor(Color.WHITE);
+
+        // add empty data
+        dataChart.setData(data);
+
+        // get the legend (only possible after setting data)
+        Legend l = dataChart.getLegend();
+
+        // modify the legend ...
+        l.setForm(Legend.LegendForm.LINE);
+//        l.setTypeface(tfLight);
+        l.setTextColor(Color.WHITE);
+
+        XAxis xl = dataChart.getXAxis();
+//        xl.setTypeface(tfLight);
+        xl.setTextColor(Color.WHITE);
+        xl.setDrawGridLines(false);
+        xl.setAvoidFirstLastClipping(true);
+        xl.setEnabled(true);
+
+        YAxis leftAxis = dataChart.getAxisLeft();
+//        leftAxis.setTypeface(tfLight);
+        leftAxis.setTextColor(Color.WHITE);
+        leftAxis.setAxisMaximum(100f);
+        leftAxis.setAxisMinimum(0f);
+        leftAxis.setDrawGridLines(true);
+
+        YAxis rightAxis = dataChart.getAxisRight();
+        rightAxis.setEnabled(false);
 
 //        minBuffSize = AudioRecord.getMinBufferSize(8000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_8BIT);
 
@@ -90,7 +136,6 @@ public class MainActivity extends AppCompatActivity implements OnChartValueSelec
 //                        .build())
 //                .setBufferSizeInBytes(2 * minBuffSize)
 //                .build();
-
 
 
         startButton.setOnClickListener(v -> {
@@ -121,6 +166,58 @@ public class MainActivity extends AppCompatActivity implements OnChartValueSelec
         });
     }
 
+    private void addEntry(float value) {
+
+        LineData data = dataChart.getData();
+
+        if (data != null) {
+
+            ILineDataSet set = data.getDataSetByIndex(0);
+            // set.addEntry(...); // can be called as well
+
+            if (set == null) {
+                set = createSet();
+                data.addDataSet(set);
+            }
+
+            data.addEntry(new Entry(set.getEntryCount(), value), 0);
+            Log.d("addEntry",set.getEntryCount()+"");
+            data.notifyDataChanged();
+
+            // let the chart know it's data has changed
+            dataChart.notifyDataSetChanged();
+
+            // limit the number of visible entries
+            dataChart.setVisibleXRangeMaximum(70);
+            // chart.setVisibleYRange(30, AxisDependency.LEFT);
+
+            // move to the latest entry
+            dataChart.moveViewToX(data.getEntryCount());
+
+            // this automatically refreshes the chart (calls invalidate())
+            // chart.moveViewTo(data.getXValCount()-7, 55f,
+            // AxisDependency.LEFT);
+        }
+    }
+
+    private LineDataSet createSet() {
+
+        LineDataSet set = new LineDataSet(null, "Dynamic Data");
+        set.setAxisDependency(YAxis.AxisDependency.LEFT);
+        set.setColor(ColorTemplate.getHoloBlue());
+        set.setCircleColor(Color.WHITE);
+        set.setLineWidth(2f);
+        set.setCircleRadius(4f);
+        set.setFillAlpha(65);
+        set.setFillColor(ColorTemplate.getHoloBlue());
+        set.setHighLightColor(Color.rgb(244, 117, 117));
+        set.setValueTextColor(Color.WHITE);
+        set.setValueTextSize(9f);
+        set.setDrawValues(false);
+        return set;
+    }
+
+
     @Override
     public void onValueSelected(Entry e, Highlight h) {
 
@@ -145,32 +242,18 @@ public class MainActivity extends AppCompatActivity implements OnChartValueSelec
         }
 
         public void run() {
-            int j=0;
             record.startRecording();
             while (record.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
 //            Log.d(RECORD_THREAD_TAG, String.valueOf((record.getRecordingState()== AudioRecord.RECORDSTATE_RECORDING)));
                 recivedDataNumber = record.read(data, 0, data.length, READ_NON_BLOCKING);
                 for (int i = 0; i < recivedDataNumber; i++) {
-                    j++;
-                    Log.d(RECORD_THREAD_TAG, data[i] + ":"+j);
+                    addEntry(data[i]);
+//                    Log.d(RECORD_THREAD_TAG, data[i] +"");
                 }
 
             }
         }
 
-        private LineDataSet createSet() {
-
-            LineDataSet set = new LineDataSet(null, "DataSet 1");
-            set.setLineWidth(2.5f);
-            set.setCircleRadius(4.5f);
-            set.setColor(Color.rgb(240, 99, 99));
-            set.setCircleColor(Color.rgb(240, 99, 99));
-            set.setHighLightColor(Color.rgb(190, 190, 190));
-            set.setAxisDependency(YAxis.AxisDependency.LEFT);
-            set.setValueTextSize(10f);
-
-            return set;
-        }
 
         @Override
         public void interrupt() {
@@ -183,3 +266,4 @@ public class MainActivity extends AppCompatActivity implements OnChartValueSelec
         }
     }
 }
+
