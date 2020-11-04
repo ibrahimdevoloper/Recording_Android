@@ -85,14 +85,14 @@ public class MainActivity extends AppCompatActivity implements
 
         // enable scaling and dragging
         dataChart.setDragEnabled(true);
-        dataChart.setScaleEnabled(true);
+        dataChart.setScaleEnabled(false);
         dataChart.setDrawGridBackground(false);
 
         // if disabled, scaling can be done on x- and y-axis separately
         dataChart.setPinchZoom(true);
 
         // set an alternative background color
-        dataChart.setBackgroundColor(Color.LTGRAY);
+        dataChart.setBackgroundColor(Color.BLACK);
 
         LineData data = new LineData();
         data.setValueTextColor(Color.WHITE);
@@ -208,7 +208,7 @@ public class MainActivity extends AppCompatActivity implements
         set.setColor(ColorTemplate.getHoloBlue());
         set.setCircleColor(Color.WHITE);
         set.setLineWidth(2f);
-        set.setCircleRadius(4f);
+        set.setCircleRadius(0f);
         set.setFillAlpha(65);
         set.setFillColor(ColorTemplate.getHoloBlue());
         set.setHighLightColor(Color.rgb(244, 117, 117));
