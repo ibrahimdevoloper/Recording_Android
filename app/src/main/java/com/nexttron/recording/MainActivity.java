@@ -53,7 +53,7 @@ public class MainActivity extends AppCompatActivity implements
                 permissionToRecordAccepted = grantResults[0] == PackageManager.PERMISSION_GRANTED;
                 int audioSource = MediaRecorder.AudioSource.DEFAULT;
                 int samplingRate = 8000;
-                int channelConfig = AudioFormat.CHANNEL_IN_DEFAULT;
+                int channelConfig = AudioFormat.CHANNEL_IN_MONO;
                 int audioFormat = AudioFormat.ENCODING_PCM_FLOAT;
                 int bufferSize = AudioRecord.getMinBufferSize(samplingRate, channelConfig, audioFormat);
 
@@ -118,8 +118,8 @@ public class MainActivity extends AppCompatActivity implements
         YAxis leftAxis = dataChart.getAxisLeft();
 //        leftAxis.setTypeface(tfLight);
         leftAxis.setTextColor(Color.WHITE);
-        leftAxis.setAxisMaximum(100f);
-        leftAxis.setAxisMinimum(0f);
+        leftAxis.setAxisMaximum(2f);
+        leftAxis.setAxisMinimum(-2f);
         leftAxis.setDrawGridLines(true);
 
         YAxis rightAxis = dataChart.getAxisRight();
@@ -145,7 +145,7 @@ public class MainActivity extends AppCompatActivity implements
                 // You can use the API that requires the permission.
                 int audioSource = MediaRecorder.AudioSource.DEFAULT;
                 int samplingRate = 8000;
-                int channelConfig = AudioFormat.CHANNEL_IN_DEFAULT;
+                int channelConfig = AudioFormat.CHANNEL_IN_MONO;
                 int audioFormat = AudioFormat.ENCODING_PCM_FLOAT;
                 int bufferSize = AudioRecord.getMinBufferSize(samplingRate, channelConfig, audioFormat);
                 recorder = new AudioRecord(audioSource, samplingRate, channelConfig, audioFormat, bufferSize);
@@ -162,7 +162,8 @@ public class MainActivity extends AppCompatActivity implements
         });
 
         stopButton.setOnClickListener(v -> {
-            recordThread.interrupt();
+            if (recorder.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING)
+                recordThread.interrupt();
         });
     }
 
@@ -181,7 +182,7 @@ public class MainActivity extends AppCompatActivity implements
             }
 
             data.addEntry(new Entry(set.getEntryCount(), value), 0);
-            Log.d("addEntry",set.getEntryCount()+"");
+//            Log.d("addEntry", set.getEntryCount() + "");
             data.notifyDataChanged();
 
             // let the chart know it's data has changed
@@ -245,11 +246,20 @@ public class MainActivity extends AppCompatActivity implements
             record.startRecording();
             while (record.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
 //            Log.d(RECORD_THREAD_TAG, String.valueOf((record.getRecordingState()== AudioRecord.RECORDSTATE_RECORDING)));
-                recivedDataNumber = record.read(data, 0, data.length, READ_NON_BLOCKING);
+                recivedDataNumber = record.read(data, 0, data.length, AudioRecord.READ_BLOCKING);
+//                Log.d(RECORD_THREAD_TAG, "recivedDataNumber"+recivedDataNumber );
+                float sum=0;
                 for (int i = 0; i < recivedDataNumber; i++) {
-                    addEntry(data[i]);
+                    sum+=data[i];
+//                        addEntry(sum);
 //                    Log.d(RECORD_THREAD_TAG, data[i] +"");
                 }
+                addEntry(sum);
+//                int i =0;
+//                while (data[i]>0){
+//                    addEntry(data[i]);
+//                    i++;
+//                }
 
             }
         }
