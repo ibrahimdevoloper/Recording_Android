@@ -27,6 +27,9 @@ import com.github.mikephil.charting.interfaces.datasets.ILineDataSet;
 import com.github.mikephil.charting.listener.OnChartValueSelectedListener;
 import com.github.mikephil.charting.utils.ColorTemplate;
 
+import java.util.LinkedList;
+import java.util.List;
+
 import static android.media.AudioRecord.READ_NON_BLOCKING;
 
 public class MainActivity extends AppCompatActivity implements
@@ -229,15 +232,23 @@ public class MainActivity extends AppCompatActivity implements
 
     }
 
+    class FilterThread extends Thread{
+        List<Float> filteredList = new LinkedList<>();
+        public FilterThread() {
+        }
+
+
+    }
+
     class RecordThread extends Thread {
         public final static String RECORD_THREAD_TAG = "recordThread";
-        LineChart dataChart;
         AudioRecord record;
         float[] data;
         int recivedDataNumber;
+        List<Float> sampleList = new LinkedList<>();
 
-        RecordThread(LineChart dataChart, AudioRecord record) {
-            this.dataChart = dataChart;
+
+        RecordThread(AudioRecord record) {
             this.record = record;
             data = new float[this.record.getBufferSizeInFrames()];
         }
@@ -245,22 +256,34 @@ public class MainActivity extends AppCompatActivity implements
         public void run() {
             record.startRecording();
             while (record.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
-//            Log.d(RECORD_THREAD_TAG, String.valueOf((record.getRecordingState()== AudioRecord.RECORDSTATE_RECORDING)));
+
                 recivedDataNumber = record.read(data, 0, data.length, AudioRecord.READ_BLOCKING);
-//                Log.d(RECORD_THREAD_TAG, "recivedDataNumber"+recivedDataNumber );
-                float sum=0;
+
+                float sum = 0;
                 for (int i = 0; i < recivedDataNumber; i++) {
-                    sum+=data[i];
-//                        addEntry(sum);
-//                    Log.d(RECORD_THREAD_TAG, data[i] +"");
+//                    sum+=data[i];
+                    sampleList.add(data[i]);
+                    if(sampleList.size()==Constants.filterArray.length)
+                        sampleList.remove(0);
+
                 }
-                addEntry(sum);
+
+                for(int i=0;i<sampleList.size();i++) {
+                    float filterSample= Constants.filterArray[Constants.filterArray.length-i-1]*sampleList.get(i);
+                    filteredList.add(filterSample);
+                    sum+=filterSample;
+                    if(i%480==0){
+                        addEntry(sum);
+                        sum=0f;
+                    }
+
+                }
+//                addEntry(sum);
 //                int i =0;
 //                while (data[i]>0){
 //                    addEntry(data[i]);
 //                    i++;
 //                }
-
             }
         }
 
@@ -274,6 +297,8 @@ public class MainActivity extends AppCompatActivity implements
                 super.interrupt();
             }
         }
+
+
     }
 }
 
