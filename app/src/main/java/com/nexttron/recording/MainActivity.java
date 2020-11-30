@@ -7,11 +7,14 @@ import androidx.core.content.ContextCompat;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.Bundle;
+import android.os.CountDownTimer;
 import android.util.Log;
 import android.widget.Button;
 
@@ -27,6 +30,7 @@ import com.github.mikephil.charting.interfaces.datasets.ILineDataSet;
 import com.github.mikephil.charting.listener.OnChartValueSelectedListener;
 import com.github.mikephil.charting.utils.ColorTemplate;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -37,7 +41,7 @@ public class MainActivity extends AppCompatActivity implements
 
     private static final String LOG_TAG = "AudioRecordTest";
     private static final int REQUEST_RECORD_AUDIO_PERMISSION = 200;
-    private static String fileName = null;
+//    private static String fileName = null;
 
 
     // Requesting permission to RECORD_AUDIO
@@ -57,11 +61,22 @@ public class MainActivity extends AppCompatActivity implements
                 int audioSource = MediaRecorder.AudioSource.DEFAULT;
                 int samplingRate = 8000;
                 int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-                int audioFormat = AudioFormat.ENCODING_PCM_FLOAT;
+                int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
                 int bufferSize = AudioRecord.getMinBufferSize(samplingRate, channelConfig, audioFormat);
 
                 recorder = new AudioRecord(audioSource, samplingRate, channelConfig, audioFormat, bufferSize);
-                recordThread = new RecordThread(dataChart, recorder);
+                recordThread = new RecordThread(recorder);
+                new CountDownTimer(15000, 1000) {
+
+                    public void onTick(long millisUntilFinished) {
+//                    mTextField.setText("seconds remaining: " + millisUntilFinished / 1000);
+                    }
+
+                    public void onFinish() {
+//                    mTextField.setText("done!");
+                        recorder.stop();
+                    }
+                }.start();
                 if (recorder.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING)
                     recordThread.start();
                 break;
@@ -121,8 +136,8 @@ public class MainActivity extends AppCompatActivity implements
         YAxis leftAxis = dataChart.getAxisLeft();
 //        leftAxis.setTypeface(tfLight);
         leftAxis.setTextColor(Color.WHITE);
-        leftAxis.setAxisMaximum(2f);
-        leftAxis.setAxisMinimum(-2f);
+//        leftAxis.setAxisMaximum(1000);
+//        leftAxis.setAxisMinimum(-1000);
         leftAxis.setDrawGridLines(true);
 
         YAxis rightAxis = dataChart.getAxisRight();
@@ -149,12 +164,25 @@ public class MainActivity extends AppCompatActivity implements
                 int audioSource = MediaRecorder.AudioSource.DEFAULT;
                 int samplingRate = 8000;
                 int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-                int audioFormat = AudioFormat.ENCODING_PCM_FLOAT;
+                int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
                 int bufferSize = AudioRecord.getMinBufferSize(samplingRate, channelConfig, audioFormat);
                 recorder = new AudioRecord(audioSource, samplingRate, channelConfig, audioFormat, bufferSize);
-                recordThread = new RecordThread(dataChart, recorder);
-                if (recorder.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING)
+                recordThread = new RecordThread(recorder);
+                if (recorder.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
                     recordThread.start();
+                    new CountDownTimer(15000, 1000) {
+
+                        public void onTick(long millisUntilFinished) {
+//                    mTextField.setText("seconds remaining: " + millisUntilFinished / 1000);
+                        }
+
+                        public void onFinish() {
+//                    mTextField.setText("done!");
+                            recorder.stop();
+                        }
+                    }.start();
+                }
+
             } else {
                 // You can directly ask for the permission.
                 // The registered ActivityResultCallback gets the result of this request.
@@ -232,52 +260,102 @@ public class MainActivity extends AppCompatActivity implements
 
     }
 
-    class FilterThread extends Thread{
-        List<Float> filteredList = new LinkedList<>();
-        public FilterThread() {
+    class FilterThread extends Thread {
+        public final static String FILTER_THREAD_TAG = "FilterThread";
+        List<Short> filteredList = new ArrayList<>();
+        short sum;
+        List<Short> sampleList;
+
+        public FilterThread(List<Short> sampleList) {
+            sum = 0;
+            this.sampleList = sampleList;
         }
 
+        @Override
+        public void run() {
+            super.run();
+            short filterSample = (short) 0;
+            for (int i = 0; i < sampleList.size(); i++) {
+                filterSample += (short) (Constants.filterArray[i] / 500 * sampleList.get(i));
+                Log.d(FILTER_THREAD_TAG, filterSample + "");
 
+//                if (i % 480 == 0) {
+//
+//                    sum = 0f;
+//                }
+
+            }
+//            filteredList.add(filterSample);
+            addEntry(filterSample);
+//            if (filteredList.size() == 480) {
+//                sum = 0;
+//                for (int i = 0; i < filteredList.size(); i++)
+//                    sum += filterSample;
+//                addEntry(sum);
+//                filteredList = new LinkedList<>();
+//            }
+        }
     }
 
     class RecordThread extends Thread {
         public final static String RECORD_THREAD_TAG = "recordThread";
         AudioRecord record;
-        float[] data;
+        short[] data;
         int recivedDataNumber;
-        List<Float> sampleList = new LinkedList<>();
+        List<Short> sampleList = new ArrayList<>();
+        FIR filter;
 
 
         RecordThread(AudioRecord record) {
             this.record = record;
-            data = new float[this.record.getBufferSizeInFrames()];
+            data = new short[this.record.getBufferSizeInFrames()];
+//            filter= new FIR(Constants.filterArray);
+            Resources res = getResources();
+            TypedArray orgSignal = res.obtainTypedArray(R.array.orgSignal);
+
         }
 
         public void run() {
+
             record.startRecording();
+
+
             while (record.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
 
                 recivedDataNumber = record.read(data, 0, data.length, AudioRecord.READ_BLOCKING);
-
-                float sum = 0;
-                for (int i = 0; i < recivedDataNumber; i++) {
+                Log.d(RECORD_THREAD_TAG, data.getClass() + "");
+//                short filterSample = (short) 0;
+//                short mean =0;
+//                for (int i = 0; i < recivedDataNumber; i++) {
+//                    filterSample =filter.getOutputSample((short) (data[i]*10));
+//                    Log.d(RECORD_THREAD_TAG, filterSample + "");
+//                    mean+=filterSample;
+//                    if (i % 500 == 0) {
+//                        addEntry(mean/500);
+//                        mean=0;
+//                    }
 //                    sum+=data[i];
-                    sampleList.add(data[i]);
-                    if(sampleList.size()==Constants.filterArray.length)
-                        sampleList.remove(0);
+//                    sampleList.add(data[i]);
+//                    if (sampleList.size() == Constants.filterArray.length)
+//                        sampleList.remove(0);
+//                    short filterSample = (short) 0;
+//                    for (int j = 0; j < sampleList.size(); j++) {
+//                        filterSample += (short) (Constants.filterArray[j] * sampleList.get(j));
+//                    }
+////                    Log.d(RECORD_THREAD_TAG, filterSample + "");
+//                    if (i % 500 == 0)
+//                        addEntry(filterSample);
 
                 }
 
-                for(int i=0;i<sampleList.size();i++) {
-                    float filterSample= Constants.filterArray[Constants.filterArray.length-i-1]*sampleList.get(i);
-                    filteredList.add(filterSample);
-                    sum+=filterSample;
-                    if(i%480==0){
-                        addEntry(sum);
-                        sum=0f;
-                    }
+//                new FilterThread(sampleList).start();
+//                short filterSample = (short) 0;
+//                for (int i = 0; i < sampleList.size(); i++) {
+//                    filterSample += (short) (Constants.filterArray[i]/1000 * sampleList.get(i));
+//                    Log.d(RECORD_THREAD_TAG, filterSample + "");
+//                }
+//                addEntry(filterSample);
 
-                }
 //                addEntry(sum);
 //                int i =0;
 //                while (data[i]>0){
@@ -285,7 +363,7 @@ public class MainActivity extends AppCompatActivity implements
 //                    i++;
 //                }
             }
-        }
+
 
 
         @Override
@@ -299,6 +377,31 @@ public class MainActivity extends AppCompatActivity implements
         }
 
 
+    }
+
+    class FIR {
+        private int length;
+        private short[] delayLine;
+        private short[] impulseResponse;
+        private int count = 0;
+
+        FIR(short[] coefs) {
+            length = coefs.length;
+            impulseResponse = coefs;
+            delayLine = new short[length];
+        }
+
+        short getOutputSample(short inputSample) {
+            delayLine[count] = inputSample;
+            short result = (short) 0.0;
+            int index = count;
+            for (int i = 0; i < length; i++) {
+                result += impulseResponse[i] * delayLine[index--];
+                if (index < 0) index = length - 1;
+            }
+            if (++count >= length) count = 0;
+            return result;
+        }
     }
 }
 
