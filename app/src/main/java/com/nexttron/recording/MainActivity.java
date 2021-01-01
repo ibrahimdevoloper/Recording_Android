@@ -17,6 +17,7 @@ import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.util.Log;
 import android.widget.Button;
+import android.widget.EditText;
 
 import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.components.Legend;
@@ -31,10 +32,10 @@ import com.github.mikephil.charting.listener.OnChartValueSelectedListener;
 import com.github.mikephil.charting.utils.ColorTemplate;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 
-import static android.media.AudioRecord.READ_NON_BLOCKING;
+import static java.lang.Math.pow;
+import static java.lang.Math.sqrt;
 
 public class MainActivity extends AppCompatActivity implements
         OnChartValueSelectedListener {
@@ -65,7 +66,11 @@ public class MainActivity extends AppCompatActivity implements
                 int bufferSize = AudioRecord.getMinBufferSize(samplingRate, channelConfig, audioFormat);
 
                 recorder = new AudioRecord(audioSource, samplingRate, channelConfig, audioFormat, bufferSize);
-                recordThread = new RecordThread(recorder);
+                EditText editDividers = findViewById(R.id.editDividers);
+                double divider = 750;
+                if (!editDividers.getText().toString().isEmpty())
+                    divider = Double.parseDouble(editDividers.getText().toString());
+                recordThread = new RecordThread(recorder,divider);
                 new CountDownTimer(15000, 1000) {
 
                     public void onTick(long millisUntilFinished) {
@@ -74,7 +79,8 @@ public class MainActivity extends AppCompatActivity implements
 
                     public void onFinish() {
 //                    mTextField.setText("done!");
-                        recorder.stop();
+//                        recorder.stop();
+                        recordThread.interrupt();
                     }
                 }.start();
                 if (recorder.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING)
@@ -161,15 +167,21 @@ public class MainActivity extends AppCompatActivity implements
                     this, Manifest.permission.RECORD_AUDIO) ==
                     PackageManager.PERMISSION_GRANTED) {
                 // You can use the API that requires the permission.
-                int audioSource = MediaRecorder.AudioSource.DEFAULT;
+                int audioSource = MediaRecorder.AudioSource.MIC;
                 int samplingRate = 8000;
                 int channelConfig = AudioFormat.CHANNEL_IN_MONO;
                 int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
                 int bufferSize = AudioRecord.getMinBufferSize(samplingRate, channelConfig, audioFormat);
                 recorder = new AudioRecord(audioSource, samplingRate, channelConfig, audioFormat, bufferSize);
-                recordThread = new RecordThread(recorder);
+                EditText editDividers = findViewById(R.id.editDividers);
+                double divider = 750;
+                if (!editDividers.getText().toString().isEmpty())
+                    divider = Double.parseDouble(editDividers.getText().toString());
+                recordThread = new RecordThread(recorder, divider);
                 if (recorder.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
+                    dataChart.getLineData().clearValues();
                     recordThread.start();
+                    Log.d(LOG_TAG, "pressed");
                     new CountDownTimer(15000, 1000) {
 
                         public void onTick(long millisUntilFinished) {
@@ -178,7 +190,9 @@ public class MainActivity extends AppCompatActivity implements
 
                         public void onFinish() {
 //                    mTextField.setText("done!");
-                            recorder.stop();
+//                            recorder.stop();
+                            Log.d(LOG_TAG, "interrupted");
+                            recordThread.interrupt();
                         }
                     }.start();
                 }
@@ -198,7 +212,7 @@ public class MainActivity extends AppCompatActivity implements
         });
     }
 
-    private void addEntry(float value) {
+    private void addEntry(double value) {
 
         LineData data = dataChart.getData();
 
@@ -212,7 +226,7 @@ public class MainActivity extends AppCompatActivity implements
                 data.addDataSet(set);
             }
 
-            data.addEntry(new Entry(set.getEntryCount(), value), 0);
+            data.addEntry(new Entry(set.getEntryCount(), (float) value), 0);
 //            Log.d("addEntry", set.getEntryCount() + "");
             data.notifyDataChanged();
 
@@ -302,17 +316,25 @@ public class MainActivity extends AppCompatActivity implements
         AudioRecord record;
         short[] data;
         int recivedDataNumber;
-        List<Short> sampleList = new ArrayList<>();
-        FIR filter;
+        List<Double> sampleList = new ArrayList<>();
+        List<Double> xcorrList = new ArrayList<>();
+        TypedArray orgSignal;
+        List<Double> orgSignalList;
+        private final double divider;
+//        FIR filter;
 
 
-        RecordThread(AudioRecord record) {
+        RecordThread(AudioRecord record, double divider) {
             this.record = record;
             data = new short[this.record.getBufferSizeInFrames()];
 //            filter= new FIR(Constants.filterArray);
             Resources res = getResources();
-            TypedArray orgSignal = res.obtainTypedArray(R.array.orgSignal);
-
+            orgSignal = res.obtainTypedArray(R.array.orgSignal);
+            orgSignalList = new ArrayList<Double>();
+            for (int i = 0; i < orgSignal.length(); i++) {
+                orgSignalList.add((double) orgSignal.getFloat(i, 0));
+            }
+            this.divider=divider;
         }
 
         public void run() {
@@ -323,7 +345,11 @@ public class MainActivity extends AppCompatActivity implements
             while (record.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
 
                 recivedDataNumber = record.read(data, 0, data.length, AudioRecord.READ_BLOCKING);
-                Log.d(RECORD_THREAD_TAG, data.getClass() + "");
+//                Log.d(RECORD_THREAD_TAG, data.getClass() + "");
+                for (int i = 0; i < data.length; i++) {
+                    sampleList.add(data[i] / (pow(2, 2 * 8)));
+//                    Log.d(LOG_TAG,data[i]/(pow(2,2*8))+"");
+                }
 //                short filterSample = (short) 0;
 //                short mean =0;
 //                for (int i = 0; i < recivedDataNumber; i++) {
@@ -346,7 +372,7 @@ public class MainActivity extends AppCompatActivity implements
 //                    if (i % 500 == 0)
 //                        addEntry(filterSample);
 
-                }
+            }
 
 //                new FilterThread(sampleList).start();
 //                short filterSample = (short) 0;
@@ -362,8 +388,7 @@ public class MainActivity extends AppCompatActivity implements
 //                    addEntry(data[i]);
 //                    i++;
 //                }
-            }
-
+        }
 
 
         @Override
@@ -371,7 +396,62 @@ public class MainActivity extends AppCompatActivity implements
             if (record.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
                 record.stop();
                 record.release();
-                Log.d(RECORD_THREAD_TAG, String.valueOf((record.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING)));
+                double corr = 0;
+                double energySample = 0;
+                double energyOrgSignal = 0;
+                double meanSample = 0;
+                double meanOrgSignal = 0;
+                for (int i = 0; i < sampleList.size(); i += (orgSignalList.size() - 1) / divider) {
+                    if (i + orgSignalList.size() <= sampleList.size()) {
+                        corr = 0;
+                        energySample = 0;
+                        energyOrgSignal = 0;
+                        meanSample = 0;
+                        meanOrgSignal = 0;
+                        for (int j = 0; j < orgSignalList.size(); j++) {
+                            corr += orgSignalList.get(j) * sampleList.get(i + j);
+                            energySample += (sampleList.get(i + j) * sampleList.get(i + j));
+                            energyOrgSignal += (orgSignalList.get(j) * orgSignalList.get(j));
+                            meanSample = sampleList.get(i + j);
+                            meanOrgSignal = orgSignalList.get(j);
+                        }
+                        corr = (corr / (sqrt(energySample * energyOrgSignal))) * 100;
+                        energySample = 0;
+                        energyOrgSignal = 0;
+                        meanSample = meanSample / orgSignalList.size();
+                        meanOrgSignal = meanOrgSignal / orgSignalList.size();
+//                        Log.d(LOG_TAG+"corr", corr + "");
+                        addEntry(corr);
+                        xcorrList.add(corr);
+//                        if (corr > 12) {
+//                            Log.d(LOG_TAG, corr + "");
+//                            break;
+//                        }
+                    } else {
+                        corr = 0;
+                        energySample = 0;
+                        energyOrgSignal = 0;
+                        int ii = sampleList.size() - orgSignalList.size() - 1;
+                        for (int j = 0; j < orgSignal.length(); j++) {
+                            corr += orgSignalList.get(j) * sampleList.get(ii + j);
+                            energySample += (sampleList.get(ii + j) * sampleList.get(ii + j));
+                            energyOrgSignal += (orgSignalList.get(j) * orgSignalList.get(j));
+                        }
+                        corr = (corr / (sqrt(energySample * energyOrgSignal))) * 100;
+                        energySample = 0;
+                        energyOrgSignal = 0;
+                        meanSample = meanSample / orgSignalList.size();
+                        meanOrgSignal = meanOrgSignal / orgSignalList.size();
+                        addEntry(corr);
+                        xcorrList.add(corr);
+                        Log.d(LOG_TAG, "Broke");
+//                        break;
+                    }
+                }
+//                short value = (short) orgSignal.getFloat(0, 0);
+//                Log.d(RECORD_THREAD_TAG, String.valueOf((record.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING)));
+//                Log.d(RECORD_THREAD_TAG, orgSignal.length() + "");
+
                 super.interrupt();
             }
         }
@@ -379,29 +459,29 @@ public class MainActivity extends AppCompatActivity implements
 
     }
 
-    class FIR {
-        private int length;
-        private short[] delayLine;
-        private short[] impulseResponse;
-        private int count = 0;
-
-        FIR(short[] coefs) {
-            length = coefs.length;
-            impulseResponse = coefs;
-            delayLine = new short[length];
-        }
-
-        short getOutputSample(short inputSample) {
-            delayLine[count] = inputSample;
-            short result = (short) 0.0;
-            int index = count;
-            for (int i = 0; i < length; i++) {
-                result += impulseResponse[i] * delayLine[index--];
-                if (index < 0) index = length - 1;
-            }
-            if (++count >= length) count = 0;
-            return result;
-        }
-    }
+//    class FIR {
+//        private int length;
+//        private short[] delayLine;
+//        private short[] impulseResponse;
+//        private int count = 0;
+//
+//        FIR(short[] coefs) {
+//            length = coefs.length;
+//            impulseResponse = coefs;
+//            delayLine = new short[length];
+//        }
+//
+//        short getOutputSample(short inputSample) {
+//            delayLine[count] = inputSample;
+//            short result = (short) 0.0;
+//            int index = count;
+//            for (int i = 0; i < length; i++) {
+//                result += impulseResponse[i] * delayLine[index--];
+//                if (index < 0) index = length - 1;
+//            }
+//            if (++count >= length) count = 0;
+//            return result;
+//        }
+//    }
 }
 
